@@ -12,17 +12,23 @@
             const clearForm = document.getElementById('clearForm');
             const errorButton = document.getElementById('errorButton');
 
-            // Get the base URL from the current location
-            const baseUrl = window.location.origin;
+            // Helper function to build URLs without double slashes
+            const buildUrl = (path) => {
+                const base = window.location.origin;
+                // Remove any leading slashes from the path
+                const cleanPath = path.replace(/^\/+/, '');
+                // Combine base and path, ensuring no double slashes
+                return `${base.replace(/\/+$/, '')}/${cleanPath}`;
+            };
             
             if (apiPrefix === "None") {
-                uploadForm.action = `${baseUrl}/tokens/upload`;
-                clearForm.action = `${baseUrl}/tokens/clear`;
-                errorButton.dataset.api = `${baseUrl}/tokens/error`;
+                uploadForm.action = buildUrl('tokens/upload');
+                clearForm.action = buildUrl('tokens/clear');
+                errorButton.dataset.api = buildUrl('tokens/error');
             } else {
-                uploadForm.action = `${baseUrl}/${apiPrefix}/tokens/upload`;
-                clearForm.action = `${baseUrl}/${apiPrefix}/tokens/clear`;
-                errorButton.dataset.api = `${baseUrl}/${apiPrefix}/tokens/error`;
+                uploadForm.action = buildUrl(`${apiPrefix}/tokens/upload`);
+                clearForm.action = buildUrl(`${apiPrefix}/tokens/clear`);
+                errorButton.dataset.api = buildUrl(`${apiPrefix}/tokens/error`);
             }
 
             errorButton.addEventListener('click', async () => {
