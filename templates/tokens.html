@@ -12,14 +12,17 @@
             const clearForm = document.getElementById('clearForm');
             const errorButton = document.getElementById('errorButton');
 
+            // Get the base URL from the current location
+            const baseUrl = window.location.origin;
+            
             if (apiPrefix === "None") {
-                uploadForm.action = "/tokens/upload";
-                clearForm.action = "/tokens/clear";
-                errorButton.dataset.api = "/tokens/error";
+                uploadForm.action = `${baseUrl}/tokens/upload`;
+                clearForm.action = `${baseUrl}/tokens/clear`;
+                errorButton.dataset.api = `${baseUrl}/tokens/error`;
             } else {
-                uploadForm.action = `/${apiPrefix}/tokens/upload`;
-                clearForm.action = `/${apiPrefix}/tokens/clear`;
-                errorButton.dataset.api = `/${apiPrefix}/tokens/error`;
+                uploadForm.action = `${baseUrl}/${apiPrefix}/tokens/upload`;
+                clearForm.action = `${baseUrl}/${apiPrefix}/tokens/clear`;
+                errorButton.dataset.api = `${baseUrl}/${apiPrefix}/tokens/error`;
             }
 
             errorButton.addEventListener('click', async () => {
