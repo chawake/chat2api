@@ -52,6 +52,54 @@
                     alert('Copy failed, please copy manually');
                 });
             });
+
+            async function handleUpload(event) {
+                event.preventDefault();
+                const uploadButton = event.target.querySelector('button[type="submit"]');
+                const originalButtonText = uploadButton.textContent;
+                const statusDiv = document.getElementById('uploadStatus');
+                
+                try {
+                    uploadButton.disabled = true;
+                    uploadButton.textContent = 'Uploading...';
+                    statusDiv.classList.add('hidden');
+                    
+                    const formData = new FormData();
+                    const textarea = document.getElementById('tokenTextarea');
+                    formData.append('text', textarea.value);
+                    
+                    const response = await fetch(uploadForm.action, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'Accept': 'application/json'
+                        }
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (response.ok) {
+                        statusDiv.className = 'bg-green-500 p-3 rounded text-white mb-4';
+                        statusDiv.textContent = 'Tokens uploaded successfully!';
+                        // Clear the textarea on success
+                        textarea.value = '';
+                        // Reload the page to show updated token count
+                        setTimeout(() => window.location.reload(), 1000);
+                    } else {
+                        throw new Error(result.detail || 'Failed to upload tokens');
+                    }
+                } catch (error) {
+                    statusDiv.className = 'bg-red-500 p-3 rounded text-white mb-4';
+                    statusDiv.textContent = `Error: ${error.message}`;
+                    console.error('Upload error:', error);
+                } finally {
+                    uploadButton.disabled = false;
+                    uploadButton.textContent = originalButtonText;
+                    statusDiv.classList.remove('hidden');
+                }
+                
+                return false;
+            }
         });
     </script>
 </head>
@@ -59,11 +107,12 @@
     <div class="bg-white p-10 rounded-lg shadow-2xl w-128 text-center">
         <h1 class="text-4xl font-extrabold text-gray-900 mb-6">Tokens Management</h1>
         <p class="text-gray-600 mb-4">Available Tokens: <span class="text-blue-600">{{ tokens_count }}</span></p>
-        <form class="mb-2" id="uploadForm" method="post">
-            <textarea class="w-full p-4 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" name="text" placeholder="One token per line, can be AccessToken or RefreshToken" rows="10"></textarea>
+        <form class="mb-2" id="uploadForm" onsubmit="return handleUpload(event)">
+            <textarea id="tokenTextarea" class="w-full p-4 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" name="text" placeholder="One token per line, can be AccessToken or RefreshToken" rows="10"></textarea>
             <p class="text-gray-600 mb-2">Note: If you're using Docker and have mounted the data folder, you won't need to re-upload after restarting</p>
             <button class="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition duration-300 mb-2" type="submit">Upload</button>
         </form>
+        <div id="uploadStatus" class="hidden mb-4 p-3 rounded text-white"></div>
         <button id="errorButton" class="w-full bg-yellow-600 text-white py-3 rounded-md hover:bg-yellow-700 transition duration-200 mt-2">View Error Tokens</button>
         <p class="text-gray-600 mt-2">Clicking Clear will remove all uploaded and error tokens</p>
         <form id="clearForm" method="post">
