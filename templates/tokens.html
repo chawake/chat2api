@@ -59,9 +59,10 @@
                 });
             });
 
-            async function handleUpload(event) {
+            // Handle form submission
+            uploadForm.addEventListener('submit', async (event) => {
                 event.preventDefault();
-                const uploadButton = event.target.querySelector('button[type="submit"]');
+                const uploadButton = uploadForm.querySelector('button[type="submit"]');
                 const originalButtonText = uploadButton.textContent;
                 const statusDiv = document.getElementById('uploadStatus');
                 
@@ -70,16 +71,18 @@
                     uploadButton.textContent = 'Uploading...';
                     statusDiv.classList.add('hidden');
                     
-                    const formData = new FormData();
                     const textarea = document.getElementById('tokenTextarea');
-                    formData.append('text', textarea.value);
+                    const tokenData = new URLSearchParams();
+                    tokenData.append('text', textarea.value);
                     
                     const response = await fetch(uploadForm.action, {
                         method: 'POST',
-                        body: formData,
+                        body: tokenData,
                         headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
                             'Accept': 'application/json'
-                        }
+                        },
+                        credentials: 'same-origin'
                     });
                     
                     const result = await response.json();
@@ -105,7 +108,7 @@
                 }
                 
                 return false;
-            }
+            });
         });
     </script>
 </head>
@@ -113,7 +116,7 @@
     <div class="bg-white p-10 rounded-lg shadow-2xl w-128 text-center">
         <h1 class="text-4xl font-extrabold text-gray-900 mb-6">Tokens Management</h1>
         <p class="text-gray-600 mb-4">Available Tokens: <span class="text-blue-600">{{ tokens_count }}</span></p>
-        <form class="mb-2" id="uploadForm" onsubmit="return handleUpload(event)">
+        <form class="mb-2" id="uploadForm">
             <textarea id="tokenTextarea" class="w-full p-4 mb-4 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" name="text" placeholder="One token per line, can be AccessToken or RefreshToken" rows="10"></textarea>
             <p class="text-gray-600 mb-2">Note: If you're using Docker and have mounted the data folder, you won't need to re-upload after restarting</p>
             <button class="w-full bg-blue-600 text-white py-3 rounded-md hover:bg-blue-700 transition duration-300 mb-2" type="submit">Upload</button>
