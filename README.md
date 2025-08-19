@@ -1,3 +1,214 @@
+
+# CHAT2API (English)
+
+🤖 A simple ChatGPT-to-API proxy
+
+🌟 Use free, unlimited `GPT-3.5` without an account
+
+💥 Supports AccessToken login; supports `O3-mini/high`, `O1/mini/Pro`, `GPT-4/4o/mini`, `GPTs`
+
+🔍 Response format fully matches the official API; compatible with almost all clients
+
+👮 Works with the user management panel [Chat-Share](https://github.com/h88782481/Chat-Share). Before using it, configure environment variables in advance (set `ENABLE_GATEWAY=True`, `AUTO_SEED=False`).
+
+## Community
+
+[https://t.me/chat2api](https://t.me/chat2api)
+
+Please read the repository docs before asking questions, especially the FAQ.
+
+When asking questions, please provide:
+
+1. Startup logs screenshot (mask sensitive info, including env vars and versions)
+2. Error logs (mask sensitive info)
+3. HTTP status code and response body from the API
+
+## Features
+
+### Latest version is stored in `version.txt`
+
+### Reverse API Features
+
+> - [x] Streaming and non-streaming
+> - [x] Account-free GPT-3.5 chat
+> - [x] GPT-3.5 model chat (if the provided model name does not contain `gpt-4`, it defaults to GPT-3.5, i.e. `text-davinci-002-render-sha`)
+> - [x] GPT-4 series chat (use a model name containing: `gpt-4`, `gpt-4o`, `gpt-4o-mini`, `gpt-4-mobile` to use the corresponding model; AccessToken required)
+> - [x] O1 series chat (use a model name containing `o1-preview`, `o1-mini`; AccessToken required)
+> - [x] GPT-4 image generation, code, and web browsing
+> - [x] GPTs supported (model name: `gpt-4-gizmo-g-*`)
+> - [x] Team Plus accounts supported (requires team account id)
+> - [x] Upload images and files (API-compatible formats; supports URL and base64)
+> - [x] Can serve as a gateway with distributed deployment
+> - [x] Multi-account round-robin; supports both `AccessToken` and `RefreshToken`
+> - [x] Retry on request failure and automatically round-robin to the next token
+> - [x] Tokens management: upload and clear
+> - [x] Scheduled `AccessToken` refresh via `RefreshToken` / On every startup, a non-forced refresh of all tokens; every 4 days at 3 AM, forced refresh all.
+> - [x] File download supported (requires history enabled)
+> - [x] Supports reasoning traces for models like `O3-mini/high`, `O1/mini/Pro`
+
+### Official-site Mirror Features
+
+> - [x] Supports native official mirror
+> - [x] Backend account pool random selection; `Seed` sets a random account
+> - [x] Login directly with `RefreshToken` or `AccessToken`
+> - [x] Supports `O3-mini/high`, `O1/mini/Pro`, `GPT-4/4o/mini`
+> - [x] Sensitive endpoints disabled; some settings endpoints disabled
+> - [x] `/login` page; after logout, auto-redirect to login
+> - [x] `/?token=xxx` direct login, where `xxx` is `RefreshToken`, `AccessToken`, or `SeedToken` (random seed)
+> - [x] Session isolation per different SeedToken
+> - [x] Supports `GPTs` store
+> - [x] Supports official unique features like `DeepResearch`, `Canvas`
+> - [x] Supports switching languages
+
+> TODO
+> - [ ] None for now, PRs/issues are welcome
+
+## Reverse API
+
+Fully `OpenAI`-compatible API. Supports `AccessToken` or `RefreshToken`. Usable models: GPT-4, GPT-4o, GPT-4o-Mini, GPTs, O1-Pro, O1, O1-Mini, O3-Mini, O3-Mini-High:
+
+```bash
+curl --location 'http://127.0.0.1:5005/v1/chat/completions' \
+--header 'Content-Type: application/json' \
+--header 'Authorization: Bearer {{Token}}' \
+--data '{
+     "model": "gpt-3.5-turbo",
+     "messages": [{"role": "user", "content": "Say this is a test!"}],
+     "stream": true
+   }'
+```
+
+Pass your account `AccessToken` or `RefreshToken` as `{{ Token }}`.
+You can also pass the value you configured in the environment variable `AUTHORIZATION`; it will randomly choose a backend account.
+
+If you have a team account, pass `ChatGPT-Account-ID` to use the Team workspace:
+
+- Method 1:
+  Put `ChatGPT-Account-ID` in the request headers.
+
+- Method 2:
+  `Authorization: Bearer <AccessToken or RefreshToken>,<ChatGPT-Account-ID>`
+
+If `AUTHORIZATION` is set, you can use its value as `{{ Token }}` to enable multi-token round-robin.
+
+> - Get `AccessToken`: log in to ChatGPT officially, then open https://chatgpt.com/api/auth/session and copy the `accessToken` value.
+> - Get `RefreshToken`: not provided here.
+> - Account-free GPT-3.5 does not require any token.
+
+## Token Management
+
+1. Configure env var `AUTHORIZATION` as an “authorization code”, then run the program.
+2. Visit `/tokens` or `/{api_prefix}/tokens` to view the number of existing tokens, upload new ones, or clear tokens.
+3. When requesting, pass the authorization code you set in `AUTHORIZATION` to use the round-robin tokens.
+
+![tokens.png](docs/tokens.png)
+
+## Official-site Mirror
+
+1. Set env var `ENABLE_GATEWAY=true`, then run the program. Note: after enabling, others can access your gateway by domain directly.
+2. Upload `RefreshToken` or `AccessToken` on the Tokens management page.
+3. Visit `/login` to open the login page.
+
+![login.png](docs/login.png)
+
+4. Use the native official mirror page.
+
+![chatgpt.png](docs/chatgpt.png)
+
+## Environment Variables
+
+Each variable has a default. If you’re unsure about meanings, do not set them (and do not pass empty strings). Strings do not need quotes.
+
+| Category | Name               | Example                                                       | Default                 | Description |
+|---------|--------------------|---------------------------------------------------------------|-------------------------|-------------|
+| Security | API_PREFIX        | `your_prefix`                                                | `None`                  | API prefix password. If unset, it’s easy to be accessed. When set, you must call `/your_prefix/v1/chat/completions`. |
+|         | AUTHORIZATION      | `your_first_authorization`,<br/>`your_second_authorization`  | `[]`                    | Your self-defined authorization code(s) for multi-account token round-robin, comma-separated. |
+|         | AUTH_KEY           | `your_auth_key`                                              | `None`                  | Set this if your private gateway requires an `auth_key` header. |
+| Request | CHATGPT_BASE_URL   | `https://chatgpt.com`                                        | `https://chatgpt.com`   | ChatGPT gateway address. Changes the target site; multiple URLs comma-separated. |
+|         | PROXY_URL          | `http://ip:port`,<br/>`http://username:password@ip:port`     | `[]`                    | Global proxy URL. Used when 403 occurs. Multiple proxies comma-separated. |
+|         | EXPORT_PROXY_URL   | `http://ip:port` or<br/>`http://username:password@ip:port`   | `None`                  | Egress proxy to avoid leaking source IP when requesting images/files. |
+| Features | HISTORY_DISABLED  | `true`                                                       | `true`                  | Whether to avoid saving chat history and returning conversation_id. |
+|         | POW_DIFFICULTY     | `00003a`                                                     | `00003a`                | Proof-of-work difficulty target. Don’t change if unsure. |
+|         | RETRY_TIMES        | `3`                                                          | `3`                     | Retry count on errors; with `AUTHORIZATION` it will auto random/round-robin next account. |
+|         | CONVERSATION_ONLY  | `false`                                                      | `false`                 | Use the conversation endpoint directly. Enable only if your gateway can auto-solve POW. |
+|         | ENABLE_LIMIT       | `true`                                                       | `true`                  | When enabled, avoids trying to bypass official rate limits to reduce risk of account bans. |
+|         | UPLOAD_BY_URL      | `false`                                                      | `false`                 | When enabled, chat by `URL + space + text`; automatically fetches URL content and uploads. Multiple URLs separated by spaces. |
+|         | SCHEDULED_REFRESH  | `false`                                                      | `false`                 | Whether to refresh `AccessToken` on a schedule. On startup, all tokens non-forced refresh once; every 4 days at 3 AM, forced refresh all. |
+|         | RANDOM_TOKEN       | `true`                                                       | `true`                  | Randomly choose a backend token. When disabled, round-robin in order. |
+| Gateway | ENABLE_GATEWAY     | `false`                                                      | `false`                 | Enable gateway mode to use the mirror site (will be publicly accessible). |
+|         | AUTO_SEED          | `false`                                                      | `true`                  | Enable random account (seed) mode. If disabled, you must integrate your own interface to manage tokens. |
+
+## Deployment
+
+### Zeabur
+
+[![Deploy on Zeabur](https://zeabur.com/button.svg)](https://zeabur.com/templates/6HEGIZ?referralCode=LanQian528)
+
+### Direct
+
+```bash
+git clone https://github.com/LanQian528/chat2api
+cd chat2api
+pip install -r requirements.txt
+python app.py
+```
+
+### Docker
+
+You need Docker and Docker Compose.
+
+```bash
+docker run -d \
+  --name chat2api \
+  -p 5005:5005 \
+  lanqian528/chat2api:latest
+```
+
+### (Recommended, works with PLUS account) Docker Compose
+
+Create a new directory (e.g. chat2api) and enter it:
+
+```bash
+mkdir chat2api
+cd chat2api
+```
+
+Download `docker-compose-warp.yml` from the repo into this directory:
+
+```bash
+wget https://raw.githubusercontent.com/LanQian528/chat2api/main/docker-compose-warp.yml
+```
+
+Modify environment variables in `docker-compose-warp.yml`, then run:
+
+```bash
+docker-compose up -d
+```
+
+## FAQ
+
+> - Error codes:
+>   - `401`: Your current IP does not support account-free login. Try changing IP, set a proxy in env var `PROXY_URL`, or your authentication failed.
+>   - `403`: Check logs for details.
+>   - `429`: Your IP exceeded the per-hour request limit. Try later or change IP.
+>   - `500`: Internal server error.
+>   - `502`: Bad gateway or network unavailable. Try a different network.
+
+> - Known notes:
+>   - Many Japanese IPs do not support account-free login. For GPT-3.5 no-auth, US IPs are recommended.
+>   - 99% of accounts support free `GPT-4o`, but availability depends on region; Japan and Singapore IPs are often enabled.
+
+> - What is the `AUTHORIZATION` environment variable?
+>   - It’s a custom auth code you set for chat2api. After setting, you can use the saved token pool via round-robin by passing it as an `APIKEY`.
+> - How to get `AccessToken`?
+>   - Log into ChatGPT officially, then open https://chatgpt.com/api/auth/session and copy the `accessToken` value.
+
+## License
+
+MIT License
+
+---
+
 # CHAT2API
 
 🤖 一个简单的 ChatGPT TO API 代理
@@ -8,7 +219,9 @@
 
 🔍 回复格式与真实 API 完全一致，适配几乎所有客户端
 
-👮 配套用户管理端[Chat-Share](https://github.com/h88782481/Chat-Share)使用前需提前配置好环境变量（ENABLE_GATEWAY设置为True，AUTO_SEED设置为False）
+👮 配套用户管理端[Chat-Share](https://github.com/h88782481/Chat-Share)使用前需提前配置好环境变量（ENABLE_GATEWAY设置为True，AUTO_SEED设---
+
+置为False）
 
 
 ## 交流群
@@ -31,7 +244,7 @@
 > - [x] 流式、非流式传输
 > - [x] 免登录 GPT-3.5 对话
 > - [x] GPT-3.5 模型对话（传入模型名不包含 gpt-4，则默认使用 gpt-3.5，也就是 text-davinci-002-render-sha）
-> - [x] GPT-4 系列模型对话（传入模型名包含: gpt-4，gpt-4o，gpt-4o-mini，gpt-4-moblie 即可使用对应模型，需传入 AccessToken）
+> - [x] GPT-4 系列模型对话（传入模型名包含: gpt-4，gpt-4o，gpt-4o-mini，gpt-4-moblie, gpt-5 即可使用对应模型，需传入 AccessToken）
 > - [x] O1 系列模型对话（传入模型名包含 o1-preview，o1-mini 即可使用对应模型，需传入 AccessToken）
 > - [x] GPT-4 模型画图、代码、联网
 > - [x] 支持 GPTs（传入模型名：gpt-4-gizmo-g-*）
@@ -211,4 +424,3 @@ docker-compose up -d
 ## License
 
 MIT License
-
