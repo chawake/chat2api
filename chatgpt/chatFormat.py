@@ -109,21 +109,31 @@ async def wss_stream_response(websocket, conversation_id):
 
 
 async def head_process_response(response):
+    gizmo_ok = False
     async for chunk in response:
         chunk = chunk.decode("utf-8")
         if chunk.startswith("data: {"):
             chunk_old_data = json.loads(chunk[6:])
             message = chunk_old_data.get("message", {})
+            # try to detect gizmo usage in several plausible locations
+            meta = message.get("metadata", {}) if isinstance(message, dict) else {}
+            if (
+                chunk_old_data.get("gizmo_id")
+                or meta.get("gizmo_id")
+                or (chunk_old_data.get("conversation_mode", {}) or {}).get("gizmo_id")
+                or (chunk_old_data.get("conversation_mode", {}) or {}).get("kind") == "gizmo_interaction"
+            ):
+                gizmo_ok = True
             if not message and "error" in chunk_old_data:
-                return response, False
+                return response, False, gizmo_ok
             role = message.get('author', {}).get('role')
             if role == 'user' or role == 'system':
                 continue
 
             status = message.get("status")
             if status == "in_progress":
-                return response, True
-    return response, False
+                return response, True, gizmo_ok
+    return response, False, gizmo_ok
 
 
 async def stream_response(service, response, model, max_tokens):

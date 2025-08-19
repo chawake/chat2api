@@ -133,14 +133,28 @@ class ChatService:
         await get_dpl(self)
 
     async def set_model(self):
-        self.origin_model = self.data.get("model", "gpt-3.5-turbo-0125")
+        # support forcing base model for a Custom GPT via syntax:
+        #   model: "g-<id>@gpt-5-thinking" or "g-<id>|gpt-5-thinking"
+        model_str = self.data.get("model", "gpt-3.5-turbo-0125")
+        forced_base_model = None
+        left_part = model_str
+        if "@" in model_str:
+            left_part, forced_base_model = model_str.split("@", 1)
+        elif "|" in model_str:
+            left_part, forced_base_model = model_str.split("|", 1)
+
+        self.origin_model = left_part
         self.resp_model = model_proxy.get(self.origin_model, self.origin_model)
         if "gizmo" in self.origin_model or "g-" in self.origin_model:
             self.gizmo_id = "g-" + self.origin_model.split("g-")[-1]
         else:
             self.gizmo_id = None
 
-        if "o3-mini-high" in self.origin_model:
+        # if a forced base model is provided, use it directly
+        if forced_base_model:
+            # keep the gizmo_id (if any) and force the underlying request model
+            self.req_model = model_proxy.get(forced_base_model, forced_base_model)
+        elif "o3-mini-high" in self.origin_model:
             self.req_model = "o3-mini-high"
         elif "o3-mini-medium" in self.origin_model:
             self.req_model = "o3-mini-medium"
@@ -156,6 +170,8 @@ class ChatService:
             self.req_model = "o1-pro"
         elif "o1-mini" in self.origin_model:
             self.req_model = "o1-mini"
+        elif "gpt-5-thinking" in self.origin_model:
+            self.req_model = "gpt-5-thinking"
         elif "gpt-5" in self.origin_model:
             self.req_model = "gpt-5"
         elif "o1" in self.origin_model:
@@ -371,11 +387,21 @@ class ChatService:
 
             content_type = r.headers.get("Content-Type", "")
             if "text/event-stream" in content_type:
-                res, start = await head_process_response(r.aiter_lines())
+                res, start, gizmo_ok = await head_process_response(r.aiter_lines())
                 if not start:
                     raise HTTPException(
                         status_code=403,
                         detail="Our systems have detected unusual activity coming from your system. Please try again later.",
+                    )
+                # Guard: if a gizmo was requested but upstream didn't confirm gizmo mode, fail fast
+                if self.gizmo_id and not gizmo_ok:
+                    logger.error(f"Gizmo requested but not confirmed by upstream. gizmo_id={self.gizmo_id}")
+                    raise HTTPException(
+                        status_code=403,
+                        detail={
+                            "message": "Custom GPT access failed or was downgraded to base assistant. Ensure the AccessToken has access to this GPT and the correct Chatgpt-Account-Id is used.",
+                            "gizmo_id": self.gizmo_id,
+                        },
                     )
                 if stream:
                     return stream_response(self, res, self.resp_model, self.max_tokens)
