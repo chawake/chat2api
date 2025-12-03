@@ -336,6 +336,8 @@ async def stream_response(service, response, model, max_tokens):
                 chunk_new_data["choices"][0]["delta"] = delta
                 chunk_new_data["choices"][0]["finish_reason"] = finish_reason
                 if not service.history_disabled:
+                    chunk_new_data.update({
+                        "message_id": message_id,
                         "conversation_id": conversation_id,
                     })
                 completion_tokens += 1
