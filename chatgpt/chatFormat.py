@@ -150,6 +150,7 @@ async def stream_response(service, response, model, max_tokens):
     last_status = None
     model_slug = None
     end = False
+    all_text = ""
 
     chunk_new_data = {
         "id": chat_id,
