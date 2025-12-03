@@ -445,8 +445,10 @@ class ChatService:
             r = await self.s.get(url, headers=headers, timeout=10)
             if r.status_code == 200:
                 download_url = r.json().get('download_url')
+                logger.info(f"get_attachment_url: {download_url}")
                 return download_url
             else:
+                logger.error(f"get_attachment_url failed: {r.status_code} {r.text}")
                 raise HTTPException(status_code=r.status_code, detail=r.text)
         except Exception as e:
             logger.error(f"Failed to get download url: {e}")

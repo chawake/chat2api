@@ -203,7 +203,7 @@ async def stream_response(service, response, model, max_tokens):
                         # Find the assistant message
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
-                        logger.debug(f"Polling: current_node={current_node}")
+                        logger.info(f"Polling: current_node={current_node}")
                         
                         found_assistant = False
                         while current_node:
@@ -213,14 +213,14 @@ async def stream_response(service, response, model, max_tokens):
                                 found_assistant = True
                                 content = message.get("content", {})
                                 content_type = content.get("content_type")
-                                logger.debug(f"Polling: Found assistant message. Content-Type: {content_type}")
+                                logger.info(f"Polling: Found assistant message. Content-Type: {content_type}")
                                 
                                 if content_type == "multimodal_text":
                                     parts = content.get("parts", [])
-                                    logger.debug(f"Polling: Parts count: {len(parts)}")
+                                    logger.info(f"Polling: Parts count: {len(parts)}")
                                     for part in parts:
                                         part_type = part.get("content_type") if isinstance(part, dict) else "string"
-                                        logger.debug(f"Polling: Part type: {part_type}")
+                                        logger.info(f"Polling: Part type: {part_type}")
                                         if isinstance(part, dict) and part_type == "image_asset_pointer":
                                                 file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
                                                 logger.info(f"Polling: Found image asset. File ID: {file_id}")
@@ -228,6 +228,8 @@ async def stream_response(service, response, model, max_tokens):
                                                 if not image_download_url:
                                                     image_download_url = await service.get_attachment_url(file_id, conversation_id)
                                                 
+                                                logger.info(f"Polling: Retrieved URL: {image_download_url}")
+
                                                 if image_download_url:
                                                     new_delta = {"content": f"\n![image]({image_download_url})\n"}
                                                     chunk_new_data["choices"][0]["delta"] = new_delta
@@ -242,7 +244,7 @@ async def stream_response(service, response, model, max_tokens):
                             current_node = node.get("parent")
                         
                         if not found_assistant:
-                            logger.debug("Polling: No assistant message found in traversal.")
+                            logger.info("Polling: No assistant message found in traversal.")
                     
                     # If we reach here, we timed out or didn't find the image.
                     # Check if we have the Chinese processing message and translate it.
