@@ -174,36 +174,56 @@ async def stream_response(service, response, model, max_tokens):
         chunk = chunk.decode("utf-8")
         if end:
             # Check if we need to poll for image
-            # Trigger if we saw image tool usage OR processing text, AND we haven't seen the final image yet
-            is_image_generation = "image_creator" in all_text or "dalle.text2im" in all_text
+            # Trigger if we saw image tool usage OR processing text, OR if the request model implies image generation
+            is_image_generation = (
+                "image_creator" in all_text 
+                or "dalle.text2im" in all_text 
+                or (service.origin_model and ("dall-e" in service.origin_model or "gpt-image" in service.origin_model or "gpt-5" in service.origin_model))
+            )
             is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
             has_image = "![image]" in all_text
             
             logger.info(f"DEBUG: all_text length: {len(all_text)}")
             logger.info(f"DEBUG: all_text content (last 200 chars): {all_text[-200:]}")
+            logger.info(f"DEBUG: origin_model={service.origin_model}")
             logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
 
             if (is_image_generation or is_processing) and not has_image:
                     logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
                     for i in range(150): # Poll for up to 300 seconds
                         await asyncio.sleep(2)
+                        # Send keep-alive comment to prevent connection timeout
+                        yield ": keep-alive\n\n"
+                        
                         conv_data = await service.get_conversation(conversation_id)
                         if not conv_data:
+                            logger.debug("Polling: No conversation data returned.")
                             continue
                         
                         # Find the assistant message
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
+                        logger.debug(f"Polling: current_node={current_node}")
+                        
+                        found_assistant = False
                         while current_node:
                             node = mapping.get(current_node, {})
                             message = node.get("message", {})
                             if message and message.get("author", {}).get("role") == "assistant":
+                                found_assistant = True
                                 content = message.get("content", {})
-                                if content.get("content_type") == "multimodal_text":
+                                content_type = content.get("content_type")
+                                logger.debug(f"Polling: Found assistant message. Content-Type: {content_type}")
+                                
+                                if content_type == "multimodal_text":
                                     parts = content.get("parts", [])
+                                    logger.debug(f"Polling: Parts count: {len(parts)}")
                                     for part in parts:
-                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
+                                        part_type = part.get("content_type") if isinstance(part, dict) else "string"
+                                        logger.debug(f"Polling: Part type: {part_type}")
+                                        if isinstance(part, dict) and part_type == "image_asset_pointer":
                                                 file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
+                                                logger.info(f"Polling: Found image asset. File ID: {file_id}")
                                                 image_download_url = await service.get_download_url(file_id)
                                                 if not image_download_url:
                                                     image_download_url = await service.get_attachment_url(file_id, conversation_id)
@@ -216,8 +236,13 @@ async def stream_response(service, response, model, max_tokens):
                                                     logger.info(f"Image found and streamed: {image_download_url}")
                                                     yield "data: [DONE]\n\n"
                                                     return
+                                                else:
+                                                    logger.error("Polling: Failed to get download URL for file.")
                                 break
                             current_node = node.get("parent")
+                        
+                        if not found_assistant:
+                            logger.debug("Polling: No assistant message found in traversal.")
                     
                     # If we reach here, we timed out or didn't find the image.
                     # Check if we have the Chinese processing message and translate it.
