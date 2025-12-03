@@ -293,6 +293,9 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                 return response
             elif 'image' in r.headers.get("content-type", "") or "audio" in r.headers.get("content-type", "") or "video" in r.headers.get("content-type", "") or "application/octet-stream" in r.headers.get("content-type", ""):
                 rheaders = dict(r.headers)
+                rheaders.pop("content-encoding", None)
+                rheaders.pop("content-length", None)
+                rheaders.pop("transfer-encoding", None)
                 response = Response(content=await r.acontent(), headers=rheaders,
                                         status_code=r.status_code, background=background)
                 return response
