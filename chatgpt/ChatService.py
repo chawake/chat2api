@@ -584,6 +584,7 @@ class ChatService:
         if self.ws:
             await self.ws.close()
             del self.ws
+<<<<<<< HEAD
     async def get_conversation(self, conversation_id):
         url = f'{self.base_url}/conversation/{conversation_id}'
         headers = self.base_headers.copy()
@@ -595,3 +596,5 @@ class ChatService:
                 return None
         except Exception:
             return None
+=======
+>>>>>>> 4c22dda46f6211c1b7f623f636bf4f2fb5105723
