@@ -22,18 +22,13 @@ fp_map = {}
 seed_map = {}
 conversation_map = {}
 impersonate_list = [
-    "chrome99",
-    "chrome100",
-    "chrome101",
-    "chrome104",
-    "chrome107",
-    "chrome110",
-    "chrome116",
-    "chrome119",
     "chrome120",
     "chrome123",
-    "edge99",
-    "edge101",
+    "chrome124",
+    "chrome125",
+    "edge120",
+    "edge123",
+    "safari17_0",
 ] if not configs.impersonate_list else configs.impersonate_list
 
 if not os.path.exists(DATA_FOLDER):
