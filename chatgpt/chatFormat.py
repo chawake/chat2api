@@ -150,7 +150,6 @@ async def stream_response(service, response, model, max_tokens):
     last_status = None
     model_slug = None
     end = False
-    all_text = ""
 
     chunk_new_data = {
         "id": chat_id,
@@ -273,7 +272,6 @@ async def stream_response(service, response, model, max_tokens):
                     elif last_content_type == "multimodal_text" and outer_content_type != "multimodal_text":
                         new_text = "\n```\n" + new_text
 
-                    all_text += new_text
                     delta = {"content": new_text}
                     last_content_type = outer_content_type
                     if completion_tokens >= max_tokens:
@@ -326,7 +324,6 @@ async def stream_response(service, response, model, max_tokens):
                         len_last_content = 0
                         if meta_data.get("finished_text"):
                             delta = {"content": f"\n{meta_data.get('finished_text')}\n"}
-                            all_text += delta["content"]
                         else:
                             continue
                 else:
@@ -346,43 +343,6 @@ async def stream_response(service, response, model, max_tokens):
                 completion_tokens += 1
                 yield f"data: {json.dumps(chunk_new_data)}\n\n"
             elif chunk.startswith("data: [DONE]"):
-                # Check if we need to poll for image
-                if "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text:
-                     logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
-                     for i in range(60): # Poll for up to 60 seconds
-                        await asyncio.sleep(2)
-                        conv_data = await service.get_conversation(conversation_id)
-                        if not conv_data:
-                            continue
-                        
-                        # Find the assistant message
-                        mapping = conv_data.get("mapping", {})
-                        current_node = conv_data.get("current_node")
-                        while current_node:
-                            node = mapping.get(current_node, {})
-                            message = node.get("message", {})
-                            if message and message.get("author", {}).get("role") == "assistant":
-                                content = message.get("content", {})
-                                if content.get("content_type") == "multimodal_text":
-                                    parts = content.get("parts", [])
-                                    for part in parts:
-                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
-                                             file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
-                                             image_download_url = await service.get_download_url(file_id)
-                                             if not image_download_url:
-                                                 image_download_url = await service.get_attachment_url(file_id, conversation_id)
-                                             
-                                             if image_download_url:
-                                                 new_delta = {"content": f"\n![image]({image_download_url})\n"}
-                                                 chunk_new_data["choices"][0]["delta"] = new_delta
-                                                 chunk_new_data["choices"][0]["finish_reason"] = "stop"
-                                                 yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                                                 logger.info(f"Image found and streamed: {image_download_url}")
-                                                 yield "data: [DONE]\n\n"
-                                                 return
-                                break
-                            current_node = node.get("parent")
-                
                 logger.info(f"Response Model: {model_slug}")
                 yield "data: [DONE]\n\n"
             else:
