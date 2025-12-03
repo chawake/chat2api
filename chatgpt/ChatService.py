@@ -174,10 +174,6 @@ class ChatService:
             self.req_model = "gpt-5-thinking"
         elif "gpt-5" in self.origin_model:
             self.req_model = "gpt-5"
-        elif "gpt-5.1-thinking" in self.origin_model:
-            self.req_model = "gpt-5.1-thinking"
-        elif "gpt-5.1" in self.origin_model:
-            self.req_model = "gpt-5.1"
         elif "o1" in self.origin_model:
             self.req_model = "o1"
         elif "gpt-4.5o" in self.origin_model:
