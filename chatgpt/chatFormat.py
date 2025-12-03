@@ -173,6 +173,61 @@ async def stream_response(service, response, model, max_tokens):
     async for chunk in response:
         chunk = chunk.decode("utf-8")
         if end:
+            # Check if we need to poll for image
+            # Trigger if we saw image tool usage OR processing text, AND we haven't seen the final image yet
+            is_image_generation = "image_creator" in all_text or "dalle.text2im" in all_text
+            is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
+            has_image = "![image]" in all_text
+            
+            logger.info(f"DEBUG: all_text length: {len(all_text)}")
+            logger.info(f"DEBUG: all_text content (last 200 chars): {all_text[-200:]}")
+            logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
+
+            if (is_image_generation or is_processing) and not has_image:
+                    logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
+                    for i in range(150): # Poll for up to 300 seconds
+                        await asyncio.sleep(2)
+                        conv_data = await service.get_conversation(conversation_id)
+                        if not conv_data:
+                            continue
+                        
+                        # Find the assistant message
+                        mapping = conv_data.get("mapping", {})
+                        current_node = conv_data.get("current_node")
+                        while current_node:
+                            node = mapping.get(current_node, {})
+                            message = node.get("message", {})
+                            if message and message.get("author", {}).get("role") == "assistant":
+                                content = message.get("content", {})
+                                if content.get("content_type") == "multimodal_text":
+                                    parts = content.get("parts", [])
+                                    for part in parts:
+                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
+                                                file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
+                                                image_download_url = await service.get_download_url(file_id)
+                                                if not image_download_url:
+                                                    image_download_url = await service.get_attachment_url(file_id, conversation_id)
+                                                
+                                                if image_download_url:
+                                                    new_delta = {"content": f"\n![image]({image_download_url})\n"}
+                                                    chunk_new_data["choices"][0]["delta"] = new_delta
+                                                    chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                                                    yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                    logger.info(f"Image found and streamed: {image_download_url}")
+                                                    yield "data: [DONE]\n\n"
+                                                    return
+                                break
+                            current_node = node.get("parent")
+                    
+                    # If we reach here, we timed out or didn't find the image.
+                    # Check if we have the Chinese processing message and translate it.
+                    if "正在处理图片" in all_text:
+                        translation = "\n\nProcessing image... There are currently many people creating images, so it may take a little time. We will notify you when the picture is ready."
+                        new_delta = {"content": translation}
+                        chunk_new_data["choices"][0]["delta"] = new_delta
+                        chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                        yield f"data: {json.dumps(chunk_new_data)}\n\n"
+
             logger.info(f"Response Model: {model_slug}")
             yield "data: [DONE]\n\n"
             break
@@ -346,61 +401,6 @@ async def stream_response(service, response, model, max_tokens):
                 completion_tokens += 1
                 yield f"data: {json.dumps(chunk_new_data)}\n\n"
             elif chunk.startswith("data: [DONE]"):
-                # Check if we need to poll for image
-                # Trigger if we saw image tool usage OR processing text, AND we haven't seen the final image yet
-                is_image_generation = "image_creator" in all_text or "dalle.text2im" in all_text
-                is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
-                has_image = "![image]" in all_text
-                
-                logger.info(f"DEBUG: all_text length: {len(all_text)}")
-                logger.info(f"DEBUG: all_text content (last 200 chars): {all_text[-200:]}")
-                logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
-
-                if (is_image_generation or is_processing) and not has_image:
-                     logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
-                     for i in range(150): # Poll for up to 300 seconds
-                        await asyncio.sleep(2)
-                        conv_data = await service.get_conversation(conversation_id)
-                        if not conv_data:
-                            continue
-                        
-                        # Find the assistant message
-                        mapping = conv_data.get("mapping", {})
-                        current_node = conv_data.get("current_node")
-                        while current_node:
-                            node = mapping.get(current_node, {})
-                            message = node.get("message", {})
-                            if message and message.get("author", {}).get("role") == "assistant":
-                                content = message.get("content", {})
-                                if content.get("content_type") == "multimodal_text":
-                                    parts = content.get("parts", [])
-                                    for part in parts:
-                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
-                                             file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
-                                             image_download_url = await service.get_download_url(file_id)
-                                             if not image_download_url:
-                                                 image_download_url = await service.get_attachment_url(file_id, conversation_id)
-                                             
-                                             if image_download_url:
-                                                 new_delta = {"content": f"\n![image]({image_download_url})\n"}
-                                                 chunk_new_data["choices"][0]["delta"] = new_delta
-                                                 chunk_new_data["choices"][0]["finish_reason"] = "stop"
-                                                 yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                                                 logger.info(f"Image found and streamed: {image_download_url}")
-                                                 yield "data: [DONE]\n\n"
-                                                 return
-                                break
-                            current_node = node.get("parent")
-                     
-                     # If we reach here, we timed out or didn't find the image.
-                     # Check if we have the Chinese processing message and translate it.
-                     if "正在处理图片" in all_text:
-                         translation = "\n\nProcessing image... There are currently many people creating images, so it may take a little time. We will notify you when the picture is ready."
-                         new_delta = {"content": translation}
-                         chunk_new_data["choices"][0]["delta"] = new_delta
-                         chunk_new_data["choices"][0]["finish_reason"] = "stop"
-                         yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                
                 logger.info(f"Response Model: {model_slug}")
                 yield "data: [DONE]\n\n"
             else:

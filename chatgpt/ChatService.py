@@ -574,6 +574,19 @@ class ChatService:
             logger.info("Failed to get response file url")
             return None
 
+    async def get_conversation(self, conversation_id):
+        try:
+            url = f"{self.base_url}/conversation/{conversation_id}"
+            headers = self.base_headers.copy()
+            r = await self.s.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                return r.json()
+            else:
+                return None
+        except Exception:
+            logger.info("Failed to get conversation")
+            return None
+
     async def close_client(self):
         if self.s:
             await self.s.close()
