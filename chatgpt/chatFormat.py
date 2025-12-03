@@ -354,7 +354,7 @@ async def stream_response(service, response, model, max_tokens):
 
                 if (is_image_generation or is_processing) and not has_image:
                      logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
-                     for i in range(60): # Poll for up to 60 seconds
+                     for i in range(150): # Poll for up to 300 seconds
                         await asyncio.sleep(2)
                         conv_data = await service.get_conversation(conversation_id)
                         if not conv_data:
@@ -387,6 +387,15 @@ async def stream_response(service, response, model, max_tokens):
                                                  return
                                 break
                             current_node = node.get("parent")
+                     
+                     # If we reach here, we timed out or didn't find the image.
+                     # Check if we have the Chinese processing message and translate it.
+                     if "正在处理图片" in all_text:
+                         translation = "\n\nProcessing image... There are currently many people creating images, so it may take a little time. We will notify you when the picture is ready."
+                         new_delta = {"content": translation}
+                         chunk_new_data["choices"][0]["delta"] = new_delta
+                         chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                         yield f"data: {json.dumps(chunk_new_data)}\n\n"
                 
                 logger.info(f"Response Model: {model_slug}")
                 yield "data: [DONE]\n\n"

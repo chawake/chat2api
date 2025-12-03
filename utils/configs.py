@@ -51,7 +51,7 @@ upload_by_url = is_true(os.getenv('UPLOAD_BY_URL', False))
 check_model = is_true(os.getenv('CHECK_MODEL', False))
 scheduled_refresh = is_true(os.getenv('SCHEDULED_REFRESH', False))
 random_token = is_true(os.getenv('RANDOM_TOKEN', True))
-oai_language = os.getenv('OAI_LANGUAGE', 'zh-CN')
+oai_language = os.getenv('OAI_LANGUAGE', 'en-US')
 
 authorization_list = authorization.split(',') if authorization else []
 chatgpt_base_url_list = chatgpt_base_url.split(',') if chatgpt_base_url else []
