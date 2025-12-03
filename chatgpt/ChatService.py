@@ -174,10 +174,6 @@ class ChatService:
             self.req_model = "gpt-5-thinking"
         elif "gpt-5" in self.origin_model:
             self.req_model = "gpt-5"
-        elif "gpt-5.1-thinking" in self.origin_model:
-            self.req_model = "gpt-5.1-thinking"
-        elif "gpt-5.1" in self.origin_model:
-            self.req_model = "gpt-5.1"
         elif "o1" in self.origin_model:
             self.req_model = "o1"
         elif "gpt-4.5o" in self.origin_model:
@@ -588,3 +584,14 @@ class ChatService:
         if self.ws:
             await self.ws.close()
             del self.ws
+    async def get_conversation(self, conversation_id):
+        url = f'{self.base_url}/conversation/{conversation_id}'
+        headers = self.base_headers.copy()
+        try:
+            r = await self.s.get(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                return r.json()
+            else:
+                return None
+        except Exception:
+            return None
