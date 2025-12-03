@@ -88,6 +88,13 @@ headers_accept_list = [
     "sec-fetch-dest",
     "sec-fetch-mode",
     "sec-fetch-site",
+    "chatgpt-account-id",
+    "authkey",
+    "priority",
+    "cache-control",
+    "pragma",
+    "if-none-match",
+    "if-modified-since",
 ]
 
 
@@ -203,6 +210,9 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
             path = path.replace("sandbox/", "")
 
         token = headers.get("authorization", "").replace("Bearer ", "").strip()
+        if not token:
+             token = request.cookies.get("token", "")
+        
         if token:
             req_token = await get_real_req_token(token)
             access_token = await verify_token(req_token)
@@ -259,6 +269,9 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
             client = Client(proxy=proxy_url, impersonate=impersonate)
         try:
             background = BackgroundTask(client.close)
+            if "estuary" in path:
+                logger.info(f"Estuary Request Headers: {headers}")
+                logger.info(f"Estuary Request Cookies: {request_cookies.keys()}")
             r = await client.request(request.method, f"{base_url}/{path}", params=params, headers=headers,
                                      cookies=request_cookies, data=data, stream=True, allow_redirects=False)
             if r.status_code == 307 or r.status_code == 302 or r.status_code == 301:
