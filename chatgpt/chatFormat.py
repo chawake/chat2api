@@ -351,6 +351,10 @@ async def stream_response(service, response, model, max_tokens):
                 is_image_generation = "image_creator" in all_text or "dalle.text2im" in all_text
                 is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
                 has_image = "![image]" in all_text
+                
+                logger.info(f"DEBUG: all_text length: {len(all_text)}")
+                logger.info(f"DEBUG: all_text content (last 200 chars): {all_text[-200:]}")
+                logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
 
                 if (is_image_generation or is_processing) and not has_image:
                      logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
