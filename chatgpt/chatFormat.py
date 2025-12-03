@@ -272,6 +272,7 @@ async def stream_response(service, response, model, max_tokens):
                     elif last_content_type == "multimodal_text" and outer_content_type != "multimodal_text":
                         new_text = "\n```\n" + new_text
 
+                    all_text += new_text
                     delta = {"content": new_text}
                     last_content_type = outer_content_type
                     if completion_tokens >= max_tokens:
@@ -324,6 +325,7 @@ async def stream_response(service, response, model, max_tokens):
                         len_last_content = 0
                         if meta_data.get("finished_text"):
                             delta = {"content": f"\n{meta_data.get('finished_text')}\n"}
+                            all_text += delta["content"]
                         else:
                             continue
                 else:
