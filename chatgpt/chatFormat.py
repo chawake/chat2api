@@ -215,6 +215,9 @@ async def stream_response(service, response, model, max_tokens):
                                 content_type = content.get("content_type")
                                 logger.info(f"Polling: Found assistant message. Content-Type: {content_type}")
                                 
+                                if content_type == "code":
+                                    logger.info(f"Polling: Code content: {json.dumps(content)}")
+
                                 if content_type == "multimodal_text":
                                     parts = content.get("parts", [])
                                     logger.info(f"Polling: Parts count: {len(parts)}")
