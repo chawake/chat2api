@@ -204,7 +204,9 @@ async def stream_response(service, response, model, max_tokens):
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
                         logger.info(f"Polling: current_node={current_node}")
-
+                        logger.info(f"Polling: HEARTBEAT - Loop is running. Mapping size: {len(mapping)}")
+                        logger.info(f"Polling: Mapping keys: {list(mapping.keys())}")
+                        
                         # Strategy: Scan ALL nodes for the image asset. 
                         # The traversal logic can be confused by tool calls or complex graph structures.
                         image_found_in_scan = False
