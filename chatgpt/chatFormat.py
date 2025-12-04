@@ -217,39 +217,42 @@ async def stream_response(service, response, model, max_tokens):
                         image_found_in_scan = False
                         for node_id, node_data in mapping.items():
                             msg = node_data.get("message")
-                            if msg and msg.get("author", {}).get("role") == "assistant":
+                            if msg:
+                                role = msg.get("author", {}).get("role")
                                 content = msg.get("content", {})
                                 c_type = content.get("content_type")
-                                logger.info(f"Polling: Node {node_id} content_type: {c_type}")
+                                status = msg.get("status")
+                                logger.info(f"Polling: Node {node_id} role={role}, content_type={c_type}, status={status}")
                                 
-                                # First check for attachments in metadata
-                                metadata = msg.get("metadata", {})
-                                attachments = metadata.get("attachments", [])
-                                if attachments:
-                                    logger.info(f"Polling: Node {node_id} has {len(attachments)} attachments: {attachments}")
-                                    for attachment in attachments:
-                                        attachment_id = attachment.get("id")
-                                        mime_type = attachment.get("mime_type", "")
-                                        if attachment_id and mime_type.startswith("image/"):
-                                            logger.info(f"Polling: FOUND image attachment in metadata. File ID: {attachment_id}")
-                                            
-                                            image_download_url = await service.get_attachment_url(attachment_id, active_conversation_id)
-                                            if not image_download_url:
-                                                image_download_url = await service.get_download_url(attachment_id)
-                                            
-                                            logger.info(f"Polling: Retrieved URL from attachment: {image_download_url}")
-                                            
-                                            if image_download_url:
-                                                new_delta = {"content": f"\n![image]({image_download_url})\n"}
-                                                chunk_new_data["choices"][0]["delta"] = new_delta
-                                                chunk_new_data["choices"][0]["finish_reason"] = "stop"
-                                                yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                                                logger.info(f"Image found and streamed from attachments: {image_download_url}")
-                                                yield "data: [DONE]\n\n"
-                                                return
-                                
-                                # Then check parts for image_asset_pointer
-                                if c_type == "multimodal_text" or True: # Force scan of all parts for debug
+                                # Check all roles (assistant AND tool) for image attachments
+                                if role in ["assistant", "tool"]:
+                                    # First check for attachments in metadata
+                                    metadata = msg.get("metadata", {})
+                                    attachments = metadata.get("attachments", [])
+                                    if attachments:
+                                        logger.info(f"Polling: Node {node_id} has {len(attachments)} attachments: {attachments}")
+                                        for attachment in attachments:
+                                            attachment_id = attachment.get("id")
+                                            mime_type = attachment.get("mime_type", "")
+                                            if attachment_id and mime_type.startswith("image/"):
+                                                logger.info(f"Polling: FOUND image attachment in metadata. File ID: {attachment_id}")
+                                                
+                                                image_download_url = await service.get_attachment_url(attachment_id, active_conversation_id)
+                                                if not image_download_url:
+                                                    image_download_url = await service.get_download_url(attachment_id)
+                                                
+                                                logger.info(f"Polling: Retrieved URL from attachment: {image_download_url}")
+                                                
+                                                if image_download_url:
+                                                    new_delta = {"content": f"\n![image]({image_download_url})\n"}
+                                                    chunk_new_data["choices"][0]["delta"] = new_delta
+                                                    chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                                                    yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                    logger.info(f"Image found and streamed from attachments: {image_download_url}")
+                                                    yield "data: [DONE]\n\n"
+                                                    return
+                                    
+                                    # Then check parts for image_asset_pointer
                                     parts = content.get("parts", [])
                                     logger.info(f"Polling: Node {node_id} parts count: {len(parts)}, types: {[type(p).__name__ for p in parts]}")
                                     for part in parts:
