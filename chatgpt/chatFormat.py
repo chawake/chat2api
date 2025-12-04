@@ -261,9 +261,25 @@ async def stream_response(service, response, model, max_tokens):
                                             logger.info(f"Polling: Part content_type: {part_content_type}, keys: {list(part.keys())}")
                                             if part_content_type == "image_asset_pointer":
                                                 asset_pointer = part.get('asset_pointer', '')
+                                                
+                                                # Check if image generation is complete
+                                                full_height = part.get("height", 0)
+                                                current_height = part.get('metadata', {}).get("generation", {}).get("height", 0)
+                                                
+                                                if full_height > 0 and current_height < full_height:
+                                                    # Image is still being generated
+                                                    completion_rate = current_height / full_height if full_height > 0 else 0
+                                                    logger.info(f"Polling: Image still generating... {completion_rate:.1%} complete ({current_height}/{full_height})")
+                                                    continue
+                                                
+                                                # Check if status is finished
+                                                if status != "finished_successfully":
+                                                    logger.info(f"Polling: Image asset found but status is '{status}', waiting for completion...")
+                                                    continue
+                                                
                                                 # Handle multiple prefix types
                                                 file_id = asset_pointer.replace('file-service://', '').replace('sediment://', '').replace('file://', '')
-                                                logger.info(f"Polling: FOUND image asset in parts. File ID: {file_id}, original pointer: {asset_pointer}")
+                                                logger.info(f"Polling: FOUND complete image asset in parts. File ID: {file_id}, original pointer: {asset_pointer}")
                                                 
                                                 # Try attachment URL first (more likely to work for generated images)
                                                 image_download_url = await service.get_attachment_url(file_id, active_conversation_id)
