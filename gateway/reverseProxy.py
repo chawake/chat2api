@@ -296,7 +296,7 @@ async def chatgpt_reverse_proxy(request: Request, path: str):
                 rheaders.pop("content-encoding", None)
                 rheaders.pop("content-length", None)
                 rheaders.pop("transfer-encoding", None)
-                response = Response(content=await r.acontent(), headers=rheaders,
+                response = StreamingResponse(content=r.aiter_content(), headers=rheaders,
                                         status_code=r.status_code, background=background)
                 return response
             else:
