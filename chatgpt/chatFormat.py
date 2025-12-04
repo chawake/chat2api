@@ -204,7 +204,20 @@ async def stream_response(service, response, model, max_tokens):
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
                         logger.info(f"Polling: current_node={current_node}")
-                        
+
+                        # DEBUG: Scan all nodes for image assets
+                        for node_id, node_data in mapping.items():
+                            msg = node_data.get("message")
+                            if msg:
+                                c_type = msg.get("content", {}).get("content_type")
+                                if c_type == "multimodal_text":
+                                    logger.info(f"Polling: FOUND multimodal_text in node {node_id}!")
+                                    # Check if it's the image we want
+                                    parts = msg.get("content", {}).get("parts", [])
+                                    for part in parts:
+                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
+                                            logger.info(f"Polling: FOUND image_asset_pointer in node {node_id}!")
+
                         found_assistant = False
                         while current_node:
                             node = mapping.get(current_node, {})
@@ -214,6 +227,9 @@ async def stream_response(service, response, model, max_tokens):
                                 content = message.get("content", {})
                                 content_type = content.get("content_type")
                                 logger.info(f"Polling: Found assistant message. Content-Type: {content_type}")
+                                logger.info(f"Polling: Node children: {node.get('children')}")
+                                logger.info(f"Polling: Message status: {message.get('status')}")
+                                logger.info(f"Polling: Message metadata: {message.get('metadata')}")
                                 
                                 if content_type == "code":
                                     logger.info(f"Polling: Code content: {json.dumps(content)}")
