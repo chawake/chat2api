@@ -205,60 +205,54 @@ async def stream_response(service, response, model, max_tokens):
                         current_node = conv_data.get("current_node")
                         logger.info(f"Polling: current_node={current_node}")
 
-                        # DEBUG: Scan all nodes for image assets
+                        # Strategy: Scan ALL nodes for the image asset. 
+                        # The traversal logic can be confused by tool calls or complex graph structures.
+                        image_found_in_scan = False
                         for node_id, node_data in mapping.items():
                             msg = node_data.get("message")
-                            if msg:
-                                c_type = msg.get("content", {}).get("content_type")
+                            if msg and msg.get("author", {}).get("role") == "assistant":
+                                content = msg.get("content", {})
+                                c_type = content.get("content_type")
                                 if c_type == "multimodal_text":
-                                    logger.info(f"Polling: FOUND multimodal_text in node {node_id}!")
-                                    # Check if it's the image we want
-                                    parts = msg.get("content", {}).get("parts", [])
+                                    parts = content.get("parts", [])
                                     for part in parts:
                                         if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
-                                            logger.info(f"Polling: FOUND image_asset_pointer in node {node_id}!")
+                                            file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
+                                            logger.info(f"Polling: FOUND image asset in node {node_id}. File ID: {file_id}")
+                                            
+                                            image_download_url = await service.get_download_url(file_id)
+                                            if not image_download_url:
+                                                image_download_url = await service.get_attachment_url(file_id, conversation_id)
+                                            
+                                            logger.info(f"Polling: Retrieved URL: {image_download_url}")
 
+                                            if image_download_url:
+                                                new_delta = {"content": f"\n![image]({image_download_url})\n"}
+                                                chunk_new_data["choices"][0]["delta"] = new_delta
+                                                chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                                                yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                logger.info(f"Image found and streamed: {image_download_url}")
+                                                yield "data: [DONE]\n\n"
+                                                return
+                                            else:
+                                                logger.error("Polling: Failed to get download URL for file.")
+                                            image_found_in_scan = True
+                                            break
+                            if image_found_in_scan:
+                                break
+                        
+                        if image_found_in_scan:
+                            return
+
+                        # Fallback: Traversal (only if scan didn't return, though scan should have caught it)
                         found_assistant = False
                         while current_node:
                             node = mapping.get(current_node, {})
                             message = node.get("message", {})
                             if message and message.get("author", {}).get("role") == "assistant":
                                 found_assistant = True
-                                content = message.get("content", {})
-                                content_type = content.get("content_type")
-                                logger.info(f"Polling: Found assistant message. Content-Type: {content_type}")
-                                logger.info(f"Polling: Node children: {node.get('children')}")
-                                logger.info(f"Polling: Message status: {message.get('status')}")
-                                logger.info(f"Polling: Message metadata: {message.get('metadata')}")
-                                
-                                if content_type == "code":
-                                    logger.info(f"Polling: Code content: {json.dumps(content)}")
-
-                                if content_type == "multimodal_text":
-                                    parts = content.get("parts", [])
-                                    logger.info(f"Polling: Parts count: {len(parts)}")
-                                    for part in parts:
-                                        part_type = part.get("content_type") if isinstance(part, dict) else "string"
-                                        logger.info(f"Polling: Part type: {part_type}")
-                                        if isinstance(part, dict) and part_type == "image_asset_pointer":
-                                                file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
-                                                logger.info(f"Polling: Found image asset. File ID: {file_id}")
-                                                image_download_url = await service.get_download_url(file_id)
-                                                if not image_download_url:
-                                                    image_download_url = await service.get_attachment_url(file_id, conversation_id)
-                                                
-                                                logger.info(f"Polling: Retrieved URL: {image_download_url}")
-
-                                                if image_download_url:
-                                                    new_delta = {"content": f"\n![image]({image_download_url})\n"}
-                                                    chunk_new_data["choices"][0]["delta"] = new_delta
-                                                    chunk_new_data["choices"][0]["finish_reason"] = "stop"
-                                                    yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                                                    logger.info(f"Image found and streamed: {image_download_url}")
-                                                    yield "data: [DONE]\n\n"
-                                                    return
-                                                else:
-                                                    logger.error("Polling: Failed to get download URL for file.")
+                                # We already scanned everything, so just logging traversal for debug if needed
+                                # logger.info(f"Polling: Traversal visiting {current_node}")
                                 break
                             current_node = node.get("parent")
                         
