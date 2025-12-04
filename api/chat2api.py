@@ -134,3 +134,84 @@ async def clear_seed_tokens():
         f.write("{}")
     logger.info(f"Seed token count: {len(globals.seed_map)}")
     return {"status": "success", "seed_tokens_count": len(globals.seed_map)}
+
+
+import json
+import re
+import base64
+import time
+from utils.Client import Client
+
+@app.post(f"/{api_prefix}/v1/images/generations" if api_prefix else "/v1/images/generations")
+async def image_generations(request: Request, credentials: HTTPAuthorizationCredentials = Security(security_scheme)):
+    req_token = credentials.credentials
+    try:
+        req_json = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail={"error": "Invalid JSON body"})
+
+    prompt = req_json.get("prompt")
+    model = req_json.get("model", "dall-e-3")
+    size = req_json.get("size", "1024x1024")
+    
+    # Construct chat request to trigger image generation
+    chat_request_data = {
+        "model": model,
+        "messages": [{"role": "user", "content": f"Generate an image of: {prompt}. Size: {size}"}],
+        "stream": True 
+    }
+
+    chat_service, res = await async_retry(process, chat_request_data, req_token)
+    
+    image_url = None
+    try:
+        if isinstance(res, types.AsyncGeneratorType):
+            async for chunk in res:
+                # chunk is a string "data: {...}"
+                if chunk.startswith("data: ") and not chunk.startswith("data: [DONE]"):
+                    try:
+                        data = json.loads(chunk[6:])
+                        content = data["choices"][0]["delta"].get("content", "")
+                        if "![image]" in content:
+                            # Extract URL
+                            match = re.search(r'\!\[image\]\((.*?)\)', content)
+                            if match:
+                                image_url = match.group(1)
+                                break
+                    except Exception:
+                        pass
+        else:
+            # Handle non-streaming response if it happens (though we requested stream=True)
+            pass
+            
+    except Exception as e:
+        logger.error(f"Error consuming stream for image generation: {e}")
+    finally:
+        await chat_service.close_client()
+
+    if not image_url:
+        raise HTTPException(status_code=500, detail="Failed to generate image URL from upstream")
+
+    # Download image and convert to Base64
+    try:
+        client = Client()
+        # Use the image URL directly. 
+        # Note: If the URL requires auth headers from the original session, we might need to reuse chat_service.s
+        # But usually these signed URLs are public for a short time.
+        r = await client.get(image_url)
+        if r.status_code != 200:
+             await client.close()
+             raise HTTPException(status_code=502, detail=f"Failed to download image: {r.status_code}")
+        
+        image_content = r.content
+        await client.close()
+        
+        b64_image = base64.b64encode(image_content).decode('utf-8')
+        
+        return {
+            "created": int(time.time()),
+            "data": [{"b64_json": b64_image}]
+        }
+    except Exception as e:
+        logger.error(f"Error downloading/converting image: {e}")
+        raise HTTPException(status_code=500, detail=f"Image processing error: {str(e)}")
