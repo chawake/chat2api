@@ -189,13 +189,15 @@ async def stream_response(service, response, model, max_tokens):
             logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
 
             if (is_image_generation or is_processing) and not has_image:
-                    logger.info(f"Image generation in progress, polling for result... Conversation ID: {conversation_id}")
+                    # Use service.conversation_id if available (it might have changed during retries), otherwise use local conversation_id
+                    active_conversation_id = getattr(service, 'conversation_id', None) or conversation_id
+                    logger.info(f"Image generation in progress, polling for result... Conversation ID: {active_conversation_id}")
                     for i in range(150): # Poll for up to 300 seconds
                         await asyncio.sleep(2)
                         # Send keep-alive comment to prevent connection timeout
                         yield ": keep-alive\n\n"
                         
-                        conv_data = await service.get_conversation(conversation_id)
+                        conv_data = await service.get_conversation(active_conversation_id)
                         if not conv_data:
                             logger.debug("Polling: No conversation data returned.")
                             continue
@@ -224,7 +226,7 @@ async def stream_response(service, response, model, max_tokens):
                                             
                                             image_download_url = await service.get_download_url(file_id)
                                             if not image_download_url:
-                                                image_download_url = await service.get_attachment_url(file_id, conversation_id)
+                                                image_download_url = await service.get_attachment_url(file_id, active_conversation_id)
                                             
                                             logger.info(f"Polling: Retrieved URL: {image_download_url}")
 
@@ -351,6 +353,7 @@ async def stream_response(service, response, model, max_tokens):
                             else:
                                 image_download_url = await service.get_attachment_url(file_id, conversation_id)
                                 new_text = f"\n```\n![image]({image_download_url})\n"
+                                all_text += new_text
                     else:
                         text = content.get("text", "")
                         if outer_content_type == "code" and last_content_type != "code":
@@ -401,6 +404,7 @@ async def stream_response(service, response, model, max_tokens):
                                     file_id = part.get('asset_pointer').replace('sediment://', '')
                                     image_download_url = await service.get_attachment_url(file_id, conversation_id)
                                     delta = {"content": f"\n![image]({image_download_url})\n"}
+                                    all_text += delta["content"]
                     elif message.get("end_turn"):
                         part = content.get("parts", [])[0]
                         new_text = part[len_last_content:]
