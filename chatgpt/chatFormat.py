@@ -183,9 +183,15 @@ async def stream_response(service, response, model, max_tokens):
             is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
             has_image = "![image]" in all_text
             
+            logger.info(f"DEBUG: all_text length: {len(all_text)}")
+            logger.info(f"DEBUG: all_text content (last 200 chars): {all_text[-200:]}")
+            logger.info(f"DEBUG: origin_model={service.origin_model}")
+            logger.info(f"DEBUG: is_image_generation={is_image_generation}, is_processing={is_processing}, has_image={has_image}")
+
             if (is_image_generation or is_processing) and not has_image:
                     # Use service.conversation_id if available (it might have changed during retries), otherwise use local conversation_id
                     active_conversation_id = getattr(service, 'conversation_id', None) or conversation_id
+                    logger.info(f"Image generation in progress, polling for result... Conversation ID: {active_conversation_id}")
                     for i in range(150): # Poll for up to 300 seconds
                         await asyncio.sleep(2)
                         # Send keep-alive comment to prevent connection timeout
@@ -202,6 +208,9 @@ async def stream_response(service, response, model, max_tokens):
                         # Find the assistant message
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
+                        logger.info(f"Polling: current_node={current_node}")
+                        logger.info(f"Polling: HEARTBEAT - Loop is running. Mapping size: {len(mapping)}")
+                        logger.info(f"Polling: Mapping keys: {list(mapping.keys())}")
                         
                         # Strategy: Scan ALL nodes for the image asset. 
                         # The traversal logic can be confused by tool calls or complex graph structures.
@@ -212,6 +221,8 @@ async def stream_response(service, response, model, max_tokens):
                                 role = msg.get("author", {}).get("role")
                                 content = msg.get("content", {})
                                 c_type = content.get("content_type")
+                                status = msg.get("status")
+                                logger.info(f"Polling: Node {node_id} role={role}, content_type={c_type}, status={status}")
                                 
                                 # Check all roles (assistant AND tool) for image attachments
                                 if role in ["assistant", "tool"]:
@@ -219,42 +230,54 @@ async def stream_response(service, response, model, max_tokens):
                                     metadata = msg.get("metadata", {})
                                     attachments = metadata.get("attachments", [])
                                     if attachments:
+                                        logger.info(f"Polling: Node {node_id} has {len(attachments)} attachments: {attachments}")
                                         for attachment in attachments:
                                             attachment_id = attachment.get("id")
                                             mime_type = attachment.get("mime_type", "")
                                             if attachment_id and mime_type.startswith("image/"):
+                                                logger.info(f"Polling: FOUND image attachment in metadata. File ID: {attachment_id}")
+                                                
                                                 image_download_url = await service.get_attachment_url(attachment_id, active_conversation_id)
                                                 if not image_download_url:
                                                     image_download_url = await service.get_download_url(attachment_id)
+                                                
+                                                logger.info(f"Polling: Retrieved URL from attachment: {image_download_url}")
                                                 
                                                 if image_download_url:
                                                     new_delta = {"content": f"\n![image]({image_download_url})\n"}
                                                     chunk_new_data["choices"][0]["delta"] = new_delta
                                                     chunk_new_data["choices"][0]["finish_reason"] = "stop"
                                                     yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                    logger.info(f"Image found and streamed from attachments: {image_download_url}")
                                                     yield "data: [DONE]\n\n"
                                                     return
                                     
                                     # Then check parts for image_asset_pointer
                                     parts = content.get("parts", [])
+                                    logger.info(f"Polling: Node {node_id} parts count: {len(parts)}, types: {[type(p).__name__ for p in parts]}")
                                     for part in parts:
                                         if isinstance(part, dict):
                                             part_content_type = part.get("content_type")
+                                            logger.info(f"Polling: Part content_type: {part_content_type}, keys: {list(part.keys())}")
                                             if part_content_type == "image_asset_pointer":
                                                 asset_pointer = part.get('asset_pointer', '')
                                                 # Handle multiple prefix types
                                                 file_id = asset_pointer.replace('file-service://', '').replace('sediment://', '').replace('file://', '')
+                                                logger.info(f"Polling: FOUND image asset in parts. File ID: {file_id}, original pointer: {asset_pointer}")
                                                 
                                                 # Try attachment URL first (more likely to work for generated images)
                                                 image_download_url = await service.get_attachment_url(file_id, active_conversation_id)
                                                 if not image_download_url:
                                                     image_download_url = await service.get_download_url(file_id)
                                                 
+                                                logger.info(f"Polling: Retrieved URL from parts: {image_download_url}")
+
                                                 if image_download_url:
                                                     new_delta = {"content": f"\n![image]({image_download_url})\n"}
                                                     chunk_new_data["choices"][0]["delta"] = new_delta
                                                     chunk_new_data["choices"][0]["finish_reason"] = "stop"
                                                     yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                    logger.info(f"Image found and streamed from parts: {image_download_url}")
                                                     yield "data: [DONE]\n\n"
                                                     return
                                                 else:

@@ -460,6 +460,7 @@ class ChatService:
         try:
             r = await self.s.post(url, headers=headers, json={}, timeout=10)
             if r.status_code == 200:
+                logger.info(f"check_async_status: {r.status_code}")
                 return True
             else:
                 logger.error(f"check_async_status failed: {r.status_code} {r.text}")
