@@ -186,25 +186,24 @@ async def image_generations(request: Request, credentials: HTTPAuthorizationCred
             
     except Exception as e:
         logger.error(f"Error consuming stream for image generation: {e}")
-    finally:
-        await chat_service.close_client()
+        # Do not close client here, we might need it for download
 
     if not image_url:
+        await chat_service.close_client()
         raise HTTPException(status_code=500, detail="Failed to generate image URL from upstream")
 
     # Download image and convert to Base64
     try:
-        client = Client()
-        # Use the image URL directly. 
-        # Note: If the URL requires auth headers from the original session, we might need to reuse chat_service.s
-        # But usually these signed URLs are public for a short time.
-        r = await client.get(image_url)
+        # Reuse the chat_service session AND headers to ensure we have the correct cookies/headers
+        # We use base_headers because chat_headers might have extra tokens we don't need for a simple GET, 
+        # but base_headers includes Authorization and Referer.
+        r = await chat_service.s.get(image_url, headers=chat_service.base_headers)
         if r.status_code != 200:
-             await client.close()
+             await chat_service.close_client()
              raise HTTPException(status_code=502, detail=f"Failed to download image: {r.status_code}")
         
         image_content = r.content
-        await client.close()
+        await chat_service.close_client()
         
         b64_image = base64.b64encode(image_content).decode('utf-8')
         
@@ -213,5 +212,6 @@ async def image_generations(request: Request, credentials: HTTPAuthorizationCred
             "data": [{"b64_json": b64_image}]
         }
     except Exception as e:
+        await chat_service.close_client()
         logger.error(f"Error downloading/converting image: {e}")
         raise HTTPException(status_code=500, detail=f"Image processing error: {str(e)}")
