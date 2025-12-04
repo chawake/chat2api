@@ -197,6 +197,9 @@ async def stream_response(service, response, model, max_tokens):
                         # Send keep-alive comment to prevent connection timeout
                         yield ": keep-alive\n\n"
                         
+                        # Trigger async status check to progress generation
+                        await service.check_async_status(active_conversation_id)
+                        
                         conv_data = await service.get_conversation(active_conversation_id)
                         if not conv_data:
                             logger.debug("Polling: No conversation data returned.")

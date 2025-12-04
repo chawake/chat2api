@@ -454,6 +454,21 @@ class ChatService:
             logger.error(f"Failed to get download url: {e}")
             return ""
 
+    async def check_async_status(self, conversation_id):
+        url = f"{self.base_url}/conversation/{conversation_id}/async-status"
+        headers = self.base_headers.copy()
+        try:
+            r = await self.s.post(url, headers=headers, timeout=10)
+            if r.status_code == 200:
+                logger.info(f"check_async_status: {r.status_code}")
+                return True
+            else:
+                logger.error(f"check_async_status failed: {r.status_code} {r.text}")
+                return False
+        except Exception as e:
+            logger.error(f"Failed to check async status: {e}")
+            return False
+
     async def get_download_url_from_upload(self, file_id):
         url = f"{self.base_url}/files/{file_id}/uploaded"
         headers = self.base_headers.copy()
