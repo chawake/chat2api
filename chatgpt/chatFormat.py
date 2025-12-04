@@ -217,8 +217,10 @@ async def stream_response(service, response, model, max_tokens):
                             if msg and msg.get("author", {}).get("role") == "assistant":
                                 content = msg.get("content", {})
                                 c_type = content.get("content_type")
-                                if c_type == "multimodal_text":
+                                logger.info(f"Polling: Node {node_id} content_type: {c_type}")
+                                if c_type == "multimodal_text" or True: # Force scan of all parts for debug
                                     parts = content.get("parts", [])
+                                    logger.info(f"Polling: Node {node_id} parts: {str(parts)[:200]}...") # Log first 200 chars of parts
                                     for part in parts:
                                         if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
                                             file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
