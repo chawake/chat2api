@@ -221,32 +221,66 @@ async def stream_response(service, response, model, max_tokens):
                                 content = msg.get("content", {})
                                 c_type = content.get("content_type")
                                 logger.info(f"Polling: Node {node_id} content_type: {c_type}")
-                                if c_type == "multimodal_text" or True: # Force scan of all parts for debug
-                                    parts = content.get("parts", [])
-                                    logger.info(f"Polling: Node {node_id} parts: {str(parts)[:200]}...") # Log first 200 chars of parts
-                                    for part in parts:
-                                        if isinstance(part, dict) and part.get("content_type") == "image_asset_pointer":
-                                            file_id = part.get('asset_pointer').replace('file-service://', '').replace('sediment://', '')
-                                            logger.info(f"Polling: FOUND image asset in node {node_id}. File ID: {file_id}")
+                                
+                                # First check for attachments in metadata
+                                metadata = msg.get("metadata", {})
+                                attachments = metadata.get("attachments", [])
+                                if attachments:
+                                    logger.info(f"Polling: Node {node_id} has {len(attachments)} attachments: {attachments}")
+                                    for attachment in attachments:
+                                        attachment_id = attachment.get("id")
+                                        mime_type = attachment.get("mime_type", "")
+                                        if attachment_id and mime_type.startswith("image/"):
+                                            logger.info(f"Polling: FOUND image attachment in metadata. File ID: {attachment_id}")
                                             
-                                            image_download_url = await service.get_download_url(file_id)
+                                            image_download_url = await service.get_attachment_url(attachment_id, active_conversation_id)
                                             if not image_download_url:
-                                                image_download_url = await service.get_attachment_url(file_id, active_conversation_id)
+                                                image_download_url = await service.get_download_url(attachment_id)
                                             
-                                            logger.info(f"Polling: Retrieved URL: {image_download_url}")
-
+                                            logger.info(f"Polling: Retrieved URL from attachment: {image_download_url}")
+                                            
                                             if image_download_url:
                                                 new_delta = {"content": f"\n![image]({image_download_url})\n"}
                                                 chunk_new_data["choices"][0]["delta"] = new_delta
                                                 chunk_new_data["choices"][0]["finish_reason"] = "stop"
                                                 yield f"data: {json.dumps(chunk_new_data)}\n\n"
-                                                logger.info(f"Image found and streamed: {image_download_url}")
+                                                logger.info(f"Image found and streamed from attachments: {image_download_url}")
                                                 yield "data: [DONE]\n\n"
                                                 return
-                                            else:
-                                                logger.error("Polling: Failed to get download URL for file.")
-                                            image_found_in_scan = True
-                                            break
+                                
+                                # Then check parts for image_asset_pointer
+                                if c_type == "multimodal_text" or True: # Force scan of all parts for debug
+                                    parts = content.get("parts", [])
+                                    logger.info(f"Polling: Node {node_id} parts count: {len(parts)}, types: {[type(p).__name__ for p in parts]}")
+                                    for part in parts:
+                                        if isinstance(part, dict):
+                                            part_content_type = part.get("content_type")
+                                            logger.info(f"Polling: Part content_type: {part_content_type}, keys: {list(part.keys())}")
+                                            if part_content_type == "image_asset_pointer":
+                                                asset_pointer = part.get('asset_pointer', '')
+                                                # Handle multiple prefix types
+                                                file_id = asset_pointer.replace('file-service://', '').replace('sediment://', '').replace('file://', '')
+                                                logger.info(f"Polling: FOUND image asset in parts. File ID: {file_id}, original pointer: {asset_pointer}")
+                                                
+                                                # Try attachment URL first (more likely to work for generated images)
+                                                image_download_url = await service.get_attachment_url(file_id, active_conversation_id)
+                                                if not image_download_url:
+                                                    image_download_url = await service.get_download_url(file_id)
+                                                
+                                                logger.info(f"Polling: Retrieved URL from parts: {image_download_url}")
+
+                                                if image_download_url:
+                                                    new_delta = {"content": f"\n![image]({image_download_url})\n"}
+                                                    chunk_new_data["choices"][0]["delta"] = new_delta
+                                                    chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                                                    yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                    logger.info(f"Image found and streamed from parts: {image_download_url}")
+                                                    yield "data: [DONE]\n\n"
+                                                    return
+                                                else:
+                                                    logger.error("Polling: Failed to get download URL for file.")
+                                                image_found_in_scan = True
+                                                break
                             if image_found_in_scan:
                                 break
                         

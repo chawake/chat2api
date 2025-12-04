@@ -458,7 +458,7 @@ class ChatService:
         url = f"{self.base_url}/conversation/{conversation_id}/async-status"
         headers = self.base_headers.copy()
         try:
-            r = await self.s.post(url, headers=headers, timeout=10)
+            r = await self.s.post(url, headers=headers, json={}, timeout=10)
             if r.status_code == 200:
                 logger.info(f"check_async_status: {r.status_code}")
                 return True
