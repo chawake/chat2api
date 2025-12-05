@@ -180,7 +180,7 @@ async def stream_response(service, response, model, max_tokens):
                 or "dalle.text2im" in all_text 
                 or (service.origin_model and ("dall-e" in service.origin_model or "gpt-image" in service.origin_model))
             )
-            is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
+            is_processing = "正在处理图片" in all_text or "Creating image" in all_text
             has_image = "![image]" in all_text
             
             logger.info(f"DEBUG: all_text length: {len(all_text)}")
