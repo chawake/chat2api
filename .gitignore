@@ -6,3 +6,5 @@
 /data/
 /.venv/
 *.txt
+*.md
+openapi-worker.js

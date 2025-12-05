@@ -178,7 +178,7 @@ async def stream_response(service, response, model, max_tokens):
             is_image_generation = (
                 "image_creator" in all_text 
                 or "dalle.text2im" in all_text 
-                or (service.origin_model and ("dall-e" in service.origin_model or "gpt-image" in service.origin_model or "gpt-5" in service.origin_model))
+                or (service.origin_model and ("dall-e" in service.origin_model or "gpt-image" in service.origin_model))
             )
             is_processing = "正在处理图片" in all_text or "Processing" in all_text or "Creating image" in all_text
             has_image = "![image]" in all_text
@@ -209,8 +209,7 @@ async def stream_response(service, response, model, max_tokens):
                         mapping = conv_data.get("mapping", {})
                         current_node = conv_data.get("current_node")
                         logger.info(f"Polling: current_node={current_node}")
-                        logger.info(f"Polling: HEARTBEAT - Loop is running. Mapping size: {len(mapping)}")
-                        logger.info(f"Polling: Mapping keys: {list(mapping.keys())}")
+                        # logger.info(f"Polling: HEARTBEAT - Loop is running. Mapping size: {len(mapping)}")
                         
                         # Strategy: Scan ALL nodes for the image asset. 
                         # The traversal logic can be confused by tool calls or complex graph structures.
@@ -222,7 +221,7 @@ async def stream_response(service, response, model, max_tokens):
                                 content = msg.get("content", {})
                                 c_type = content.get("content_type")
                                 status = msg.get("status")
-                                logger.info(f"Polling: Node {node_id} role={role}, content_type={c_type}, status={status}")
+                                # logger.info(f"Polling: Node {node_id} role={role}, content_type={c_type}, status={status}")
                                 
                                 # Check all roles (assistant AND tool) for image attachments
                                 if role in ["assistant", "tool"]:
@@ -252,13 +251,27 @@ async def stream_response(service, response, model, max_tokens):
                                                     yield "data: [DONE]\n\n"
                                                     return
                                     
+                                    # Check for Content Policy Violation or Refusal
+                                    if c_type == "text":
+                                        parts = content.get("parts", [])
+                                        if parts and isinstance(parts[0], str):
+                                            text_content = parts[0]
+                                            if "content policy" in text_content or "request did not follow" in text_content:
+                                                logger.warning(f"Polling: Detected content policy violation: {text_content}")
+                                                new_delta = {"content": f"\n{text_content}\n"}
+                                                chunk_new_data["choices"][0]["delta"] = new_delta
+                                                chunk_new_data["choices"][0]["finish_reason"] = "stop"
+                                                yield f"data: {json.dumps(chunk_new_data)}\n\n"
+                                                yield "data: [DONE]\n\n"
+                                                return
+
                                     # Then check parts for image_asset_pointer
                                     parts = content.get("parts", [])
-                                    logger.info(f"Polling: Node {node_id} parts count: {len(parts)}, types: {[type(p).__name__ for p in parts]}")
+                                    # logger.info(f"Polling: Node {node_id} parts count: {len(parts)}, types: {[type(p).__name__ for p in parts]}")
                                     for part in parts:
                                         if isinstance(part, dict):
                                             part_content_type = part.get("content_type")
-                                            logger.info(f"Polling: Part content_type: {part_content_type}, keys: {list(part.keys())}")
+                                            # logger.info(f"Polling: Part content_type: {part_content_type}, keys: {list(part.keys())}")
                                             if part_content_type == "image_asset_pointer":
                                                 asset_pointer = part.get('asset_pointer', '')
                                                 
